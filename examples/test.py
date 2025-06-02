@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 from video_uniform import process_video_uniform
-
+from ball import detect_ball
 def process_video(video_path):
     cap = cv2.VideoCapture(video_path)
 
@@ -78,13 +78,16 @@ def process_video(video_path):
             y_min = min(b[1] for b in group)
             x_max = max(b[2] for b in group)
             y_max = max(b[3] for b in group)
-            cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 255), 2)
+            #cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 255), 2)
 
+       
+        ball_mask = detect_ball(frame)
+        cv2.imshow("White Near Green", ball_mask)
         # 유니폼 기반 추출 결과
         edges_uniform = process_video_uniform(frame)
-
+        combined_mask_1=cv2.bitwise_or(edges_uniform, ball_mask)
         # 최종 병합 및 출력
-        combined_mask = cv2.bitwise_or(mask_person_shape, edges_uniform)
+        combined_mask = cv2.bitwise_or(mask_person_shape, combined_mask_1)
         combined_colored = cv2.cvtColor(combined_mask, cv2.COLOR_GRAY2BGR)
         cv2.imshow("Final Edge Detection", combined_colored)
 
@@ -95,4 +98,4 @@ def process_video(video_path):
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    process_video("soccer_video.mp4")
+    process_video("soccer_video2.mp4")
