@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from video_uniform import process_video_uniform
 from ball import detect_ball
-from blur import apply_blur
+from blur import apply_blur, remove_spectator_region
 from color_picker import get_dominant_colors, RealTimeColorDisplay, integrate_realtime_colors
 from compactness_filter import remove_low_compactness
 import watershed as ws
@@ -80,22 +80,10 @@ def process_video(video_path):
                 boxes.append([x, y, x + w, y + h])
                 cv2.drawContours(mask_person_shape, [cnt], -1, 255, thickness=cv2.FILLED)
 
-        # Remove top white region (e.g., scoreboard) until white area <= 30% per row
-        height, width = mask_person_shape.shape
-        white_threshold = int(width * 0.3)
-        cutoff_row = None
-        for row_idx in range(height):
-            # Count white pixels in this row
-            white_count = np.count_nonzero(mask_person_shape[row_idx] == 255)
-            if white_count <= white_threshold:
-                cutoff_row = row_idx
-                break
-            # Fill this row completely with black
-            mask_person_shape[row_idx, :] = 0
-        if cutoff_row is None:
-            cutoff_row = height
+        # 윤곽선 추출, contours → mask_person_shape 생성 (unchanged)
 
-        # 윤곽 box 병합
+        # Remove spectator area using the helper function
+        mask_person_shape, cutoff_rows = remove_spectator_region(mask_person_shape, 4)
         def boxes_overlap(box1, box2, threshold=30):
             x1_min, y1_min, x1_max, y1_max = box1
             x2_min, y2_min, x2_max, y2_max = box2
@@ -132,17 +120,23 @@ def process_video(video_path):
         cv2.imshow("ball_mask", ball_mask)
         
         combined_mask_1 = cv2.bitwise_and(blur_mask, ball_mask)
-        combined_mask_1 = remove_low_compactness(combined_mask_1, compactness_threshold=0.2)
+        combined_mask_1 = remove_low_compactness(combined_mask_1, compactness_threshold=0.3)
         cv2.imshow("Combined Mask", combined_mask_1)
 
         combined_mask_2 = cv2.bitwise_and(mask_person_shape, blur_mask)
-        #cv2.imshow("Combined Mask 2", combined_mask_2)
+        cv2.imshow("Combined Mask 2", combined_mask_2)
         
         # 최종 병합 마스크
         combined_mask = cv2.bitwise_or(combined_mask_2, combined_mask_1)
         # Mask spectator region (above cutoff_row) to remove audience area
-        combined_mask[:cutoff_row, :] = 0
-        #cv2.imshow("Combined Mask 3", combined_mask)
+        for slice_idx, cutoff_row in enumerate(cutoff_rows):
+            # 한 슬라이스의 가로 범위를 계산
+            slice_width = frame.shape[1] // len(cutoff_rows)
+            start_col = slice_idx * slice_width
+            # 마지막 슬라이스는 남는 영역을 모두 포함
+            end_col = (slice_idx + 1) * slice_width if slice_idx < len(cutoff_rows) - 1 else frame.shape[1]
+            # 해당 슬라이스 구간에서, cutoff_row 위쪽을 모두 0(검은색)으로 마스킹
+            mask_person_shape[:cutoff_row, start_col:end_col] = 0
         
         # **선수 영역 bounding box 추출**
         player_boxes = extract_player_bounding_boxes(combined_mask)
@@ -161,6 +155,9 @@ def process_video(video_path):
         # 원본 프레임에도 bounding box 표시
         frame_with_boxes = draw_player_boxes(frame, merged_boxes, 
                                            color=(255, 0, 0), thickness=2)
+        
+        # Mask spectator region (above cutoff_row) to remove audience area
+        combined_mask[:cutoff_row, :] = 0
         
         # 정보 표시
         cv2.rectangle(combined_colored_with_boxes, (0, 0), (640, 360), (0, 255, 0), 2)
