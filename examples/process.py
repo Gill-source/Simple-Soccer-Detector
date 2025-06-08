@@ -24,7 +24,6 @@ def process_video(video_path):
         index += 1
 
         frame = cv2.resize(frame, (640, 360))
-        cv2.imshow("original", frame)
         
         # 색상 분석 (선택사항)
         #all 1 mask
@@ -191,10 +190,10 @@ def process_video(video_path):
                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
         # 화면 출력
-        cv2.imshow("Object Detection", frame_with_original)
+        #cv2.imshow("Object Detection", frame_with_original)
         cv2.imshow("Player Tracking", frame_with_stable)
-        cv2.imshow("Final Result with Boxes", combined_colored_with_boxes)
-        cv2.imshow("Original with Boxes", frame_with_boxes)
+        # cv2.imshow("Final Result with Boxes", combined_colored_with_boxes)
+        # cv2.imshow("Original with Boxes", frame_with_boxes)
 
         # 유니폼 기반 추출 결과
         # edges_uniform = process_video_uniform2_imp(frame, merged_boxes)
@@ -204,8 +203,11 @@ def process_video(video_path):
         # cv2.imshow("masked_teams", frame)
         #cv2.imshow("pxCount_masked_teams", frame)
 
-        process_video_uniform_pxCount_70(frame, merged_boxes)
-        cv2.imshow("pxCount_masked_teams", frame)
+        # process_video_uniform_pxCount_70(frame, merged_boxes)
+        # cv2.imshow("pxCount_masked_teams", frame)
+
+        process_video_uniform_pxCount_70(frame, stable_boxes)
+        cv2.imshow("merged_masked_teams", frame)
 
         # 선수 정보 출력
         if merged_boxes:
