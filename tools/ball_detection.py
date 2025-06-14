@@ -128,7 +128,6 @@ def detect_ball(frame: np.ndarray, grass_mask: np.ndarray = None,
     ball_mask = cv2.GaussianBlur(ball_mask, (3, 3), 0)
 
     gray = cv2.Canny(gray, 50, 150)
-    cv2.imshow("Canny", gray)
 
     # grass_mask가 제공된 경우 사용, 없으면 전체 영역 사용
     if grass_mask is not None:
