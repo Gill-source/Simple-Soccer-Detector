@@ -1,14 +1,17 @@
 import cv2
 import numpy as np
 import argparse
-from examples.color_picker import RealTimeColorDisplay, integrate_realtime_colors
+import os
+import json
+from datetime import datetime
+from tools.color_picker import RealTimeColorDisplay, integrate_realtime_colors
 from tools.color_utils import bgr_range, create_uniform_mask
-from tools.detection import draw_bounding_boxes, get_bounding_boxes, draw_boxes_on_frame
+from tools.detection import get_bounding_boxes, draw_boxes_on_frame
 from tools.player_tracker import PlayerTrackerManager
 from tools.ball_detection import detect_ball, draw_ball_detection, filter_ball_by_field_position
 from tools.ball_tracker import BallTrackerManager
 
-def process_video(video_path, team1_color_rgb, team2_color_rgb, ball_color_rgb=None, tracker_debug_mode=False):
+def process_video(video_path, team1_color_rgb, team2_color_rgb, ball_color_rgb=None, tracker_debug_mode=False, output_path=None):
     # RGB 입력을 BGR로 변환 (한 번만 변환)
     team1_color_bgr = [team1_color_rgb[2], team1_color_rgb[1], team1_color_rgb[0]]  # R,G,B -> B,G,R
     team2_color_bgr = [team2_color_rgb[2], team2_color_rgb[1], team2_color_rgb[0]]  # R,G,B -> B,G,R
@@ -24,6 +27,33 @@ def process_video(video_path, team1_color_rgb, team2_color_rgb, ball_color_rgb=N
     if not cap.isOpened():
         print("Error: Could not open video file")
         return
+
+    # 비디오 정보 가져오기
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    # 출력 경로 설정
+    if output_path is None:
+        # 현재 디렉토리에 output 폴더 생성
+        output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # 입력 비디오 파일명을 기반으로 출력 파일명 생성
+        input_filename = os.path.basename(video_path)
+        output_filename = f"tracked_{input_filename}"
+        output_path = os.path.join(output_dir, output_filename)
+
+    # JSON 출력 파일 설정
+    json_output_dir = os.path.join(os.path.dirname(output_path), "json")
+    os.makedirs(json_output_dir, exist_ok=True)
+    json_filename = f"tracking_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    json_output_path = os.path.join(json_output_dir, json_filename)
+
+    # 비디오 작성자 초기화
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (640, 360))
 
     # 첫 프레임에서 잔디 색상 추출
     ret, first_frame = cap.read()
@@ -51,17 +81,18 @@ def process_video(video_path, team1_color_rgb, team2_color_rgb, ball_color_rgb=N
     # 추적 모드 출력
     mode_text = "추적 전용 모드 (첫 프레임만 등록)" if tracker_debug_mode else "일반 모드 (매 프레임 등록/업데이트)"
     print(f"실행 모드: {mode_text}")
+    print(f"출력 파일: {output_path}")
+    print(f"JSON 파일: {json_output_path}")
 
     # 윈도우 생성
-    cv2.namedWindow("Original", cv2.WINDOW_NORMAL)
-    cv2.namedWindow("Team 1", cv2.WINDOW_NORMAL)
-    cv2.namedWindow("Team 2", cv2.WINDOW_NORMAL)
-    cv2.namedWindow("Tracked Players", cv2.WINDOW_NORMAL)
-    cv2.namedWindow("Ball Detection", cv2.WINDOW_NORMAL)
+    cv2.namedWindow("Soccer Tracking", cv2.WINDOW_NORMAL)
 
     # 첫 프레임 플래그 (tracker_debug_mode에서만 사용)
     is_first_frame = True
     frame_count = 0
+
+    # JSON 데이터를 저장할 리스트
+    tracking_data = []
 
     try:
         # 비디오를 처음부터 다시 읽기 위해 재설정
@@ -99,16 +130,13 @@ def process_video(video_path, team1_color_rgb, team2_color_rgb, ball_color_rgb=N
             team1_detected_bboxes = get_bounding_boxes(frame, mask_team1_final, dominant_colors)
             team2_detected_bboxes = get_bounding_boxes(frame, mask_team2_final, dominant_colors)
             
-            # 공 감지
-            detected_ball_bboxes = detect_ball(frame, mask_green, ball_color_bgr, debug=True)
+            # 공 감지 (선수 bbox와 관중석 필터링 포함)
+            all_player_bboxes = team1_detected_bboxes + team2_detected_bboxes
+            detected_ball_bboxes = detect_ball(frame, mask_green, ball_color_bgr, player_bboxes=all_player_bboxes)
             detected_ball_bboxes = filter_ball_by_field_position(detected_ball_bboxes, frame.shape)
             
             # 공 추적 업데이트
             ball_tracker_manager.update_ball_tracking(detected_ball_bboxes, tracker_manager, frame, frame_count)
-            
-            # 추적된 공 바운딩 박스 가져오기
-            tracked_ball_bbox = ball_tracker_manager.get_ball_bbox()
-            ball_bboxes = [tracked_ball_bbox] if tracked_ball_bbox is not None else []
             
             # 추적 모드에 따른 처리
             if tracker_debug_mode:
@@ -125,52 +153,120 @@ def process_video(video_path, team1_color_rgb, team2_color_rgb, ball_color_rgb=N
             # 추적된 바운딩 박스들 가져오기
             team1_tracked_bboxes, team2_tracked_bboxes = tracker_manager.get_all_bboxes()
             
-            # 결과 그리기
-            # 감지된 bbox로 그리기 (기존 방식)
-            result_team1 = draw_boxes_on_frame(frame, team1_detected_bboxes, color=(255, 255, 255))  # 흰색
-            result_team2 = draw_boxes_on_frame(frame, team2_detected_bboxes, color=(0, 0, 0))  # 검은색
+            # 현재 프레임의 추적 데이터 수집
+            frame_data = {
+                "frame_number": frame_count,
+                "timestamp": frame_count / fps,  # 초 단위 타임스탬프
+                "players": {
+                    "team1": [],
+                    "team2": []
+                },
+                "ball": None
+            }
+
+            # 팀1 선수 데이터 수집
+            for bbox in team1_tracked_bboxes:
+                x, y, w, h = bbox
+                player_data = {
+                    "position": {
+                        "x": int(x + w/2),  # 중심점 x 좌표
+                        "y": int(y + h/2)   # 중심점 y 좌표
+                    },
+                    "bbox": {
+                        "x": int(x),
+                        "y": int(y),
+                        "width": int(w),
+                        "height": int(h)
+                    }
+                }
+                frame_data["players"]["team1"].append(player_data)
+
+            # 팀2 선수 데이터 수집
+            for bbox in team2_tracked_bboxes:
+                x, y, w, h = bbox
+                player_data = {
+                    "position": {
+                        "x": int(x + w/2),  # 중심점 x 좌표
+                        "y": int(y + h/2)   # 중심점 y 좌표
+                    },
+                    "bbox": {
+                        "x": int(x),
+                        "y": int(y),
+                        "width": int(w),
+                        "height": int(h)
+                    }
+                }
+                frame_data["players"]["team2"].append(player_data)
+
+            # 공 데이터 수집
+            ball_info = ball_tracker_manager.get_ball_info()
+            if ball_info['active']:
+                ball_bbox = ball_tracker_manager.get_ball_bbox()
+                if ball_bbox:
+                    x, y, w, h = ball_bbox
+                    frame_data["ball"] = {
+                        "position": {
+                            "x": int(x + w/2),  # 중심점 x 좌표
+                            "y": int(y + h/2)   # 중심점 y 좌표
+                        },
+                        "bbox": {
+                            "x": int(x),
+                            "y": int(y),
+                            "width": int(w),
+                            "height": int(h)
+                        },
+                        "possession": ball_info['possession']
+                    }
+
+            # 현재 프레임 데이터를 전체 데이터에 추가
+            tracking_data.append(frame_data)
             
-            # 추적된 bbox로 그리기 (새로운 방식)
-            result_tracked = frame.copy()
-            result_tracked = draw_boxes_on_frame(result_tracked, team1_tracked_bboxes, color=(0, 255, 255))  # 노란색
-            result_tracked = draw_boxes_on_frame(result_tracked, team2_tracked_bboxes, color=(255, 0, 255))  # 마젠타색
+            # 결과 그리기
+            # 추적된 bbox로 그리기
+            result_frame = frame.copy()
+            result_frame = draw_boxes_on_frame(result_frame, team1_tracked_bboxes, color=(0, 255, 255))  # 노란색
+            result_frame = draw_boxes_on_frame(result_frame, team2_tracked_bboxes, color=(255, 0, 255))  # 마젠타색
             
             # 공 감지 결과 그리기
-            result_ball = draw_ball_detection(frame, ball_bboxes, color=(0, 255, 0))  # 초록색
+            result_frame = draw_ball_detection(result_frame, detected_ball_bboxes, color=(0, 255, 0))  # 초록색
             
             # 추적 정보 표시
             team1_count, team2_count = tracker_manager.get_tracker_count()
-            cv2.putText(result_tracked, f"Frame: {frame_count} | Team1: {team1_count}, Team2: {team2_count}", 
+            cv2.putText(result_frame, f"Frame: {frame_count}/{total_frames} | Team1: {team1_count}, Team2: {team2_count}", 
                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             
             # 추적 모드 표시
             mode_display = "only tracking" if tracker_debug_mode else "tracking and registering"
-            cv2.putText(result_tracked, f"Mode: {mode_display}", 
+            cv2.putText(result_frame, f"Mode: {mode_display}", 
                        (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             
             # 공 정보 표시
             ball_info = ball_tracker_manager.get_ball_info()
             if ball_info['active']:
                 possession_info = ball_info['possession']
-                cv2.putText(result_ball, f"Ball Active | Frames Lost: {ball_info['frames_lost']}", 
-                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.putText(result_frame, f"Ball Active | Frames Lost: {ball_info['frames_lost']}", 
+                           (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 
                 if possession_info['in_possession']:
-                    cv2.putText(result_ball, f"Possession: Team {possession_info['team']} (Player {possession_info['player_id']})", 
-                               (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                    cv2.putText(result_frame, f"Possession: Team {possession_info['team']} (Player {possession_info['player_id']})", 
+                               (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
                 else:
-                    cv2.putText(result_ball, f"Free Ball | Closest: Team {possession_info['team']} ({possession_info['distance']:.1f}px)", 
-                               (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                    cv2.putText(result_frame, f"Free Ball | Closest: Team {possession_info['team']} ({possession_info['distance']:.1f}px)", 
+                               (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             else:
-                cv2.putText(result_ball, f"Ball Not Tracked", 
-                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                cv2.putText(result_frame, f"Ball Not Tracked", 
+                           (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             
             # 결과 표시
-            cv2.imshow("Original", frame)
-            cv2.imshow("Team 1", result_team1)
-            cv2.imshow("Team 2", result_team2)
-            cv2.imshow("Tracked Players", result_tracked)
-            cv2.imshow("Ball Detection", result_ball)
+            cv2.imshow("Soccer Tracking", result_frame)
+            
+            # 결과 프레임 저장
+            out.write(result_frame)
+            
+            # 진행률 표시
+            if frame_count % 30 == 0:  # 30프레임마다 진행률 출력
+                progress = (frame_count / total_frames) * 100
+                print(f"Progress: {progress:.1f}% ({frame_count}/{total_frames})")
             
             # 키 입력 처리
             key = cv2.waitKey(1) & 0xFF
@@ -185,7 +281,30 @@ def process_video(video_path, team1_color_rgb, team2_color_rgb, ball_color_rgb=N
         traceback.print_exc()
     finally:
         cap.release()
+        out.release()
         cv2.destroyAllWindows()
+        print(f"Video saved to: {output_path}")
+        
+        # JSON 파일 저장
+        try:
+            with open(json_output_path, 'w') as f:
+                json.dump({
+                    "metadata": {
+                        "video_path": video_path,
+                        "fps": fps,
+                        "total_frames": total_frames,
+                        "frame_width": frame_width,
+                        "frame_height": frame_height,
+                        "team1_color": team1_color_rgb,
+                        "team2_color": team2_color_rgb,
+                        "ball_color": ball_color_rgb if ball_color_rgb else [255, 255, 255],
+                        "tracker_debug_mode": tracker_debug_mode
+                    },
+                    "frames": tracking_data
+                }, f, indent=2)
+            print(f"Tracking data saved to: {json_output_path}")
+        except Exception as e:
+            print(f"Error saving JSON file: {e}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='축구 선수 추적 프로그램')
@@ -198,7 +317,9 @@ if __name__ == "__main__":
                       help='공 색상 (RGB 형식, 예: 255 255 255)')
     parser.add_argument('--tracker_debug', action='store_true',
                       help='추적 전용 모드 활성화 (첫 프레임에서만 플레이어 등록)')
+    parser.add_argument('--output-path', type=str,
+                      help='출력 비디오 파일 경로 (지정하지 않으면 output 폴더에 저장)')
     
     args = parser.parse_args()
     
-    process_video(args.video_path, args.team1_color, args.team2_color, args.ball_color, args.tracker_debug)
+    process_video(args.video_path, args.team1_color, args.team2_color, args.ball_color, args.tracker_debug, args.output_path)
