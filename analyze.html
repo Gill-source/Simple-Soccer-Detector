@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="./static/global.css" />
+    <link rel="stylesheet" href="./static/analyze.css" />
+  </head>
+
+  <body>
+    <div class="screen">
+      <div class="div">
+        <div class="depth-frame">
+          <div class="depth-frame-wrapper">
+            <div class="div-wrapper"><div class="text-wrapper">Streaming</div></div>
+          </div>
+          <div class="depth-frame-2">
+            <div class="depth-frame-3">   
+              <video id="analyzed-video" width="800" controls>
+                <source src="/video" type="video/mp4" />
+                브라우저가 video 태그를 지원하지 않습니다.
+              </video>
+
+                <div style="margin-top: 8px;">
+                  <button onclick="location.href='/download/video'">영상 다운로드</button>
+                  <button onclick="location.href='/download/info'">JSON 다운로드</button>
+                </div>
+
+            </div>
+          </div>
+        </div>
+        <div class="depth-frame-5">
+          <div class="depth-frame-wrapper">
+            <div class="div-wrapper"><div class="text-wrapper">Football share</div></div>
+          </div>
+          <div class="depth-frame-2">
+            <div class="depth-frame-3">
+
+
+
+              <div id="info-container">
+                정보 넣기
+              </div>
+            
+            
+            </div>
+          </div>
+        </div>
+        <div class="depth-frame-7">
+          <div class="depth-frame-8">
+            
+              <div class="icon-wrapper">
+                <img class="vector" src="./static/img/icon.svg" />
+              </div>
+            
+            <div class="depth-frame-9"><div class="text-wrapper-2">Simple Soccer Detector</div></div>
+          </div>
+          <div class="depth-frame-10">
+            <div class="depth-frame-11"><div class="depth-frame-12"></div></div>
+            <div class="depth-frame-13">
+              <div class="depth-frame-14"><div class="text-wrapper-3">Home</div></div>
+            </div>
+            <div class="depth-frame-13">
+              <div class="depth-frame-14"><div class="text-wrapper-4">New Analyze</div></div>
+            </div>
+            <div class="circled-question-wrapper">
+              <img class="circled-question" src="./static/img/question.svg" />
+            </div>
+            <div class="circled-question-wrapper">
+              <img class="img" src="./static/img/user.svg" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    window.addEventListener('DOMContentLoaded', function() {
+      fetch('/info')
+        .then(res => res.json())
+        .then(data => {
+          // 예쁘게 출력 (pre 태그 사용)
+          document.getElementById('info-container').innerHTML =
+            '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        })
+        .catch(err => {
+          document.getElementById('info-container').innerText = '정보를 불러오지 못했습니다.';
+        });
+    });
+    </script>
+  </body>
+</html>

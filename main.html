@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="./static/global.css" />
+    <link rel="stylesheet" href="./static/analyze.css" />
+    <style>
+      #fileInput {
+        display: none;
+      }
+      .clickable {
+        cursor: pointer;
+      }
+      .depth-frame-3.dragover {
+        border: 2px dashed #007bff;
+        background-color: #f0f8ff;
+      }
+      .file-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 5px 0;
+        padding: 6px 10px;
+        background-color: #f9f9f9;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        font-size: 14px;
+        width: 100%; 
+      }
+
+      .file-item span {
+        display: block;
+        overflow-wrap: break-word;
+      }
+
+      .file-remove {
+        color: red;
+        font-weight: bold;
+        margin-left: 10px;
+        cursor: pointer;
+        flex-shrink: 0; 
+      }
+    </style>
+  </head>
+  <body>
+    <div class="screen">
+      <div class="div">
+        <div class="depth-frame">
+          <div class="depth-frame-wrapper">
+            <div class="div-wrapper">
+              <div class="text-wrapper">Upload your File</div>
+            </div>
+          </div>
+          <div class="depth-frame-2">
+            <div class="depth-frame-3" id="dropZone">
+              <div class="depth-frame-4">
+                <div class="depth-frame-5">
+                  <p class="p">Drag and drop your files here</p>
+                </div>
+                <div class="depth-frame-6">
+                  <p class="text-wrapper-2">Or, click to select files from your computer</p>
+                </div>
+              </div>
+              <div class="depth-frame-7">
+                <div class="depth-frame-8 clickable" id="fileTrigger">
+                  <div class="text-wrapper-3">Select Files</div>
+                </div>
+                <input type="file" id="fileInput" multiple accept=".mp4,.mov,.avi,.mkv" />
+              </div>
+              <!-- 파일 목록 표시 -->
+              <div id="fileList"></div>
+            </div>
+          </div>
+          <div class="depth-frame-9">
+            <p class="text-wrapper-4">
+              Supported file types: MP4, MOV, AVI, MKV. Maximum file size: 5GB
+            </p>
+          </div>
+        </div>
+          <div class="depth-frame-10">
+            <div class="depth-frame-11">
+                <div class="icon-wrapper">
+                  <img class="vector" src="./static/img/icon.svg" />
+                </div>
+              <div class="depth-frame-12">
+                <div class="text-wrapper-5">Simple Soccer Detector</div>
+              </div>
+            </div>
+            <div class="depth-frame-13">
+              <div class="depth-frame-14"></div>
+              <div class="depth-frame-16">
+                <div class="depth-frame-8">
+                  <div class="text-wrapper-6">Home</div>
+                </div>
+              </div>
+              <div class="depth-frame-16">
+                <div class="depth-frame-8">
+                  <div class="text-wrapper-3">New Analyze</div>
+                </div>
+              </div>
+              <div class="circled-question-wrapper">
+                <img class="circled-question" src="./static/img/question.svg" />
+              </div>
+              <div class="circled-question-wrapper">
+                <img class="img" src="./static/img/user.svg" />
+              </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const fileInput = document.getElementById('fileInput');
+      const fileTrigger = document.getElementById('fileTrigger');
+      const dropZone = document.getElementById('dropZone');
+      const fileList = document.getElementById('fileList');
+
+      let currentFiles = [];
+
+      const allowedExtensions = ['mp4', 'mov', 'avi', 'mkv'];
+
+      fileTrigger.addEventListener('click', () => fileInput.click());
+
+      fileInput.addEventListener('change', () => {
+        handleFiles(fileInput.files);
+        fileInput.value = ''; // 같은 파일 다시 선택 가능하도록 초기화
+      });
+
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+      });
+
+      dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('dragover');
+      });
+
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        handleFiles(e.dataTransfer.files);
+      });
+
+      function handleFiles(files) {
+        Array.from(files).forEach(file => {
+          const ext = file.name.split('.').pop().toLowerCase();
+          if (!allowedExtensions.includes(ext)) {
+            alert(`❗ "${file.name}"은 지원되지 않는 확장자입니다.`);
+            return;
+          }
+
+          // 같은 이름의 파일은 중복 추가 안 함
+          if (currentFiles.find(f => f.name === file.name)) return;
+
+          currentFiles.push(file);
+          renderFileList();
+        });
+      }
+
+      function renderFileList() {
+        fileList.innerHTML = '';
+        currentFiles.forEach((file, index) => {
+          const div = document.createElement('div');
+          div.className = 'file-item';
+          div.innerHTML = `
+            <span>📄 ${file.name}</span>
+            <span class="file-remove" data-index="${index}">❌</span>
+          `;
+          fileList.appendChild(div);
+        });
+
+        // 삭제 버튼 이벤트 등록
+        document.querySelectorAll('.file-remove').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            const idx = e.target.dataset.index;
+            currentFiles.splice(idx, 1);
+            renderFileList();
+          });
+        });
+      }
+    </script>
+  </body>
+</html>
