@@ -4,7 +4,7 @@ import argparse
 import os
 import json
 from datetime import datetime
-from tools.color_picker import RealTimeColorDisplay, integrate_realtime_colors
+from tools.color_picker import integrate_realtime_colors
 from tools.color_utils import bgr_range, create_uniform_mask
 from tools.detection import get_bounding_boxes, draw_boxes_on_frame
 from tools.player_tracker import PlayerTrackerManager
@@ -70,9 +70,8 @@ def process_video(video_path, team1_color_rgb, team2_color_rgb, ball_color_rgb=N
     frame_height, frame_width = first_frame.shape[:2]
     
     # 잔디 색상 분석 (BGR 색상 공간)
-    color_display = RealTimeColorDisplay()
     all_mask = np.ones_like(first_frame, dtype=np.uint8) * 255
-    dominant_colors = integrate_realtime_colors(first_frame, all_mask, color_display, color_space="bgr")  
+    dominant_colors = integrate_realtime_colors(first_frame, all_mask, color_space="bgr")  
     print("Grass color (BGR):", dominant_colors)
     print("Ball color (BGR):", ball_color_bgr)
     
