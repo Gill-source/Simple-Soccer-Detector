@@ -240,6 +240,8 @@
     </div>
 
     <script>
+      console.log('Main window loaded');
+      
       const fileInput = document.getElementById('fileInput');
       const fileTrigger = document.getElementById('fileTrigger');
       const dropZone = document.getElementById('dropZone');
@@ -369,6 +371,19 @@
           alert('오류가 발생했습니다: ' + error.message);
           startAnalysis.disabled = false;
           startAnalysis.textContent = 'Start Analysis';
+        }
+      });
+
+      // 페이지 로드 완료 시
+      window.addEventListener('DOMContentLoaded', () => {
+        console.log('DOM Content Loaded');
+        
+        // Start Analysis 버튼 클릭 시 로그
+        const startButton = document.getElementById('startAnalysis');
+        if (startButton) {
+          startButton.addEventListener('click', () => {
+            console.log('Start Analysis button clicked');
+          });
         }
       });
     </script>

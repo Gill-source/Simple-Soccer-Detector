@@ -29,7 +29,7 @@ def process_video(video_path, team1_color_rgb, team2_color_rgb, ball_color_rgb=N
     # 비디오 캡처 초기화
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        print("Error: Could not open video file")
+        print("Error: Could not open video file", file=sys.stderr)
         return
 
     # 비디오 정보 가져오기
@@ -62,7 +62,7 @@ def process_video(video_path, team1_color_rgb, team2_color_rgb, ball_color_rgb=N
     # 첫 프레임에서 잔디 색상 추출
     ret, first_frame = cap.read()
     if not ret:
-        print("Error: Could not read first frame")
+        print("Error: Could not read first frame", file=sys.stderr)
         return
 
     # 프레임 크기 조정 후 PlayerTrackerManager 초기화
@@ -72,8 +72,8 @@ def process_video(video_path, team1_color_rgb, team2_color_rgb, ball_color_rgb=N
     # 잔디 색상 분석 (BGR 색상 공간)
     all_mask = np.ones_like(first_frame, dtype=np.uint8) * 255
     dominant_colors = integrate_realtime_colors(first_frame, all_mask, color_space="bgr")  
-    print("Grass color (BGR):", dominant_colors)
-    print("Ball color (BGR):", ball_color_bgr)
+    print("Grass color (BGR):", dominant_colors, file=sys.stderr)
+    print("Ball color (BGR):", ball_color_bgr, file=sys.stderr)
     
     # PlayerTrackerManager 초기화 (잔디색 전달)
     tracker_manager = PlayerTrackerManager(frame_width, frame_height, dominant_colors)
@@ -83,9 +83,9 @@ def process_video(video_path, team1_color_rgb, team2_color_rgb, ball_color_rgb=N
 
     # 추적 모드 출력
     mode_text = "추적 전용 모드 (첫 프레임만 등록)" if tracker_debug_mode else "일반 모드 (매 프레임 등록/업데이트)"
-    print(f"실행 모드: {mode_text}")
-    print(f"출력 파일: {output_path}")
-    print(f"JSON 파일: {json_output_path}")
+    print(f"실행 모드: {mode_text}", file=sys.stderr)
+    print(f"출력 파일: {output_path}", file=sys.stderr)
+    print(f"JSON 파일: {json_output_path}", file=sys.stderr)
 
     # 윈도우 생성
     cv2.namedWindow("Soccer Tracking", cv2.WINDOW_NORMAL)
@@ -328,29 +328,59 @@ def send_frame(frame):
     sys.stdout.buffer.flush()
 
 def main():
-    parser = argparse.ArgumentParser(description='Soccer Player Tracking')
-    parser.add_argument('video_path', help='Path to input video file')
-    parser.add_argument('--team1-color', nargs=3, type=int, help='Team 1 color (RGB)')
-    parser.add_argument('--team2-color', nargs=3, type=int, help='Team 2 color (RGB)')
-    parser.add_argument('--output-dir', help='Output directory path', default='output')
-    args = parser.parse_args()
+    try:
+        # 즉시 stderr 출력으로 실행 확인
+        print("🚀 Python main() started", file=sys.stderr)
+        sys.stderr.flush()
+        
+        # 디버깅: 실행 환경 정보 출력
+        print(f"Python executable: {sys.executable}", file=sys.stderr)
+        print(f"Python version: {sys.version}", file=sys.stderr)
+        print(f"Current working directory: {os.getcwd()}", file=sys.stderr)
+        print(f"Script path: {__file__}", file=sys.stderr)
+        print(f"Arguments: {sys.argv}", file=sys.stderr)
+        
+        parser = argparse.ArgumentParser(description='Soccer Player Tracking')
+        parser.add_argument('video_path', help='Path to input video file')
+        parser.add_argument('--team1-color', nargs=3, type=int, help='Team 1 color (RGB)')
+        parser.add_argument('--team2-color', nargs=3, type=int, help='Team 2 color (RGB)')
+        parser.add_argument('--output-dir', help='Output directory path', default='output')
+        args = parser.parse_args()
 
-    # 팀 색상 설정
-    team1_color = tuple(args.team1_color) if args.team1_color else (255, 0, 0)
-    team2_color = tuple(args.team2_color) if args.team2_color else (0, 0, 255)
+        # 팀 색상 설정
+        team1_color = tuple(args.team1_color) if args.team1_color else (255, 0, 0)
+        team2_color = tuple(args.team2_color) if args.team2_color else (0, 0, 255)
 
-    # 출력 경로 설정 (인자로 받은 경로 사용)
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(exist_ok=True)
-    output_path = output_dir / 'tracked_video.mp4'
+        # 출력 경로 설정 (인자로 받은 경로 사용)
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(exist_ok=True)
+        output_path = output_dir / 'tracked_video.mp4'
 
-    # process_video 함수 호출하여 실제 축구 추적 수행
-    process_video(
-        video_path=args.video_path,
-        team1_color_rgb=team1_color,
-        team2_color_rgb=team2_color,
-        output_path=str(output_path)
-    )
+        print(f"✓ Starting video processing...", file=sys.stderr)
+        print(f"  Input: {args.video_path}", file=sys.stderr)
+        print(f"  Output: {output_path}", file=sys.stderr)
+        print(f"  Team 1 color (RGB): {team1_color}", file=sys.stderr)
+        print(f"  Team 2 color (RGB): {team2_color}", file=sys.stderr)
+
+        # stdout 텍스트 출력 제거 - 바이너리 헤더 파싱 오류 방지
+        # print("STDOUT_TEST_START", flush=True)
+        # sys.stdout.flush()
+        print("📡 Starting video processing (stdout reserved for binary data)", file=sys.stderr)
+
+        # process_video 함수 호출하여 실제 축구 추적 수행
+        process_video(
+            video_path=args.video_path,
+            team1_color_rgb=team1_color,
+            team2_color_rgb=team2_color,
+            output_path=str(output_path)
+        )
+        
+        print(f"✓ Video processing completed successfully!", file=sys.stderr)
+        return 0
+    except Exception as e:
+        print(f"Error occurred: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
 
 if __name__ == '__main__':
     main()

@@ -34,6 +34,7 @@ function createWindow() {
   });
 
   mainWindow.loadFile('main.html');
+  mainWindow.webContents.openDevTools();
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -104,11 +105,25 @@ ipcMain.handle('start-analysis', async (event, { videoPath, team1Color, team2Col
     if (!team1Rgb || !team2Rgb) throw new Error('Invalid team colors');
 
     createAnalyzeWindow();
+    
+    // 디버깅 메시지를 클라이언트로 전송하는 함수
+    const sendDebug = (message) => {
+      console.log(message); // 터미널에도 출력
+      if (analyzeWindow && !analyzeWindow.isDestroyed()) {
+        // analyze window의 개발자도구 콘솔에 직접 로그 출력
+        analyzeWindow.webContents.executeJavaScript(`console.log('${message.replace(/'/g, "\\'")}');`);
+      }
+    };
+    
+    sendDebug('=== start-analysis called ===');
+    sendDebug(`app.isPackaged: ${app.isPackaged}`);
+    sendDebug(`videoPath: ${videoPath}`);
 
     // 패키징된 앱에서 Python 실행 파일 경로 처리
     let pythonCmd, pythonArgs;
     
     if (app.isPackaged) {
+      sendDebug('=== Packaged app mode ===');
       // 패키징된 경우: 번들된 실행 파일 사용
       const executableName = process.platform === 'win32' ? 'soccer_detector.exe' : 'soccer_detector';
       
@@ -127,43 +142,82 @@ ipcMain.handle('start-analysis', async (event, { videoPath, team1Color, team2Col
       
       pythonCmd = null;
       for (const possiblePath of possiblePaths) {
+        sendDebug(`Checking: ${possiblePath}`);
         if (fs.existsSync(possiblePath)) {
           pythonCmd = possiblePath;
-          console.log(`Found Python executable at: ${pythonCmd}`);
+          sendDebug(`✓ Found Python executable at: ${pythonCmd}`);
           break;
         }
       }
       
       if (!pythonCmd) {
-        console.error('Python executable not found in any of these paths:');
-        possiblePaths.forEach(p => console.error(`  - ${p}`));
+        sendDebug('❌ Python executable not found in any of these paths:');
+        possiblePaths.forEach(p => sendDebug(`  - ${p}`));
         throw new Error('Python executable not found');
       }
       
+      // 절대 경로로 변환 (패키징 모드)
+      let absoluteVideoPath;
+      if (path.isAbsolute(videoPath)) {
+        absoluteVideoPath = videoPath;
+      } else if (videoPath.startsWith('output/')) {
+        // videoPath가 'output/input_video.mp4' 형태인 경우
+        absoluteVideoPath = path.join(path.dirname(outputDir), videoPath);
+      } else {
+        absoluteVideoPath = path.join(outputDir, videoPath);
+      }
+      sendDebug(`Converting video path: ${videoPath} → ${absoluteVideoPath}`);
+      
       pythonArgs = [
-        videoPath,
+        absoluteVideoPath,
         '--team1-color', team1Rgb.r, team1Rgb.g, team1Rgb.b,
         '--team2-color', team2Rgb.r, team2Rgb.g, team2Rgb.b,
         '--output-dir', outputDir
       ].map(String);
     } else {
+      sendDebug('=== Development mode ===');
       // 개발 모드: Python 스크립트 직접 실행
       pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
       const script = path.join(__dirname, 'main.py');
+      
+      // 절대 경로로 변환
+      let absoluteVideoPath;
+      if (path.isAbsolute(videoPath)) {
+        absoluteVideoPath = videoPath;
+      } else if (videoPath.startsWith('output/')) {
+        // videoPath가 'output/input_video.mp4' 형태인 경우
+        absoluteVideoPath = path.join(path.dirname(outputDir), videoPath);
+      } else {
+        absoluteVideoPath = path.join(outputDir, videoPath);
+      }
+      sendDebug(`Converting video path: ${videoPath} → ${absoluteVideoPath}`);
+      
       pythonArgs = [
         script,
-        videoPath,
+        absoluteVideoPath,
         '--team1-color', team1Rgb.r, team1Rgb.g, team1Rgb.b,
         '--team2-color', team2Rgb.r, team2Rgb.g, team2Rgb.b,
         '--output-dir', outputDir
       ].map(String);
     }
     
+    sendDebug(`About to spawn: ${pythonCmd}`);
+    sendDebug(`Args: ${pythonArgs.join(' ')}`);
+    
     const py = spawn(pythonCmd, pythonArgs, {
       cwd: app.isPackaged ? process.resourcesPath : __dirname,
       env: { ...process.env }
     });
-    console.log('Spawned Python:', pythonCmd, pythonArgs.join(' '));
+    sendDebug('✓ Python process spawned');
+
+    // 프로세스 에러 처리
+    py.on('error', (err) => {
+      sendDebug(`❌ Python process error: ${err.message}`);
+    });
+
+    py.on('close', (code) => {
+      sendDebug(`Python process closed with code: ${code}`);
+    });
 
     // Python 프로세스 출력 처리
     let frameBuffer = Buffer.alloc(0);
@@ -173,6 +227,14 @@ ipcMain.handle('start-analysis', async (event, { videoPath, team1Color, team2Col
     let headerReceived = false;
 
     py.stdout.on('data', (data) => {
+      sendDebug(`📥 Received ${data.length} bytes from Python stdout`);
+      
+      // 텍스트 데이터 확인 (디버깅용)
+      const textData = data.toString().trim();
+      if (textData && textData.length < 200) { // 짧은 텍스트만 로깅
+        sendDebug(`📄 Text content: "${textData}"`);
+      }
+      
       frameBuffer = Buffer.concat([frameBuffer, data]);
       
       while (frameBuffer.length > 0) {
@@ -183,12 +245,15 @@ ipcMain.handle('start-analysis', async (event, { videoPath, team1Color, team2Col
           frameHeight = frameBuffer.readUInt16LE(6);
           frameBuffer = frameBuffer.slice(8);
           headerReceived = true;
+          sendDebug(`📺 Frame header: ${expectedFrameSize} bytes, ${frameWidth}x${frameHeight}`);
         }
         
         if (headerReceived && frameBuffer.length >= expectedFrameSize) {
           // 프레임 데이터 추출
           const frameData = frameBuffer.slice(0, expectedFrameSize);
           frameBuffer = frameBuffer.slice(expectedFrameSize);
+          
+          sendDebug(`🎬 Processing frame data: ${frameData.length} bytes`);
           
           // Electron 렌더러로 프레임 전송
           if (analyzeWindow && !analyzeWindow.isDestroyed()) {
@@ -209,9 +274,10 @@ ipcMain.handle('start-analysis', async (event, { videoPath, team1Color, team2Col
     });
 
     py.stderr.on('data', (data) => {
-      console.log('Python stderr:', data.toString());
+      const message = data.toString();
+      sendDebug(`🐍 Python stderr: ${message.trim()}`);
       if (analyzeWindow && !analyzeWindow.isDestroyed()) {
-        analyzeWindow.webContents.send('python-log', data.toString());
+        analyzeWindow.webContents.send('python-log', message);
       }
     });
 
