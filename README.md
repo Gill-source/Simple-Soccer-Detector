@@ -59,6 +59,7 @@ GPU 없이도 높은 FPS와 정확도를 달성하는 것을 목표로 설계되
 
 ---
 ### 🎯 Result
+데모영상: https://www.youtube.com/watch?v=JhD-FGbmyys
 Player Deetection & Team Classification
 <img width="1580" height="1012" alt="KakaoTalk_20250616_133406284_04" src="https://github.com/user-attachments/assets/91124f5a-ab77-4207-9244-76dcf73bef3d" />
 데모영상: https://www.youtube.com/watch?v=JhD-FGbmyys
